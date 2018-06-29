@@ -1,0 +1,32 @@
+{
+    "name": "trump",
+    "version": "0.0.1",
+    "description": "tweet like trump",
+    "main": "index.js",
+    "scripts": {
+        "start": "node nerNet/trainModel.js",
+        "load": "node nerNet/loadModel.js",
+        "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "keywords": [
+        "machine",
+        "learning",
+        "tenserflow",
+        "keras",
+        "tweet",
+        "like",
+        "trump"
+    ],
+    "author": "Ragotzy.devin <devin.ragotzy@gmail.com>",
+    "license": "MIT",
+    "dependencies": {
+        "@tensorflow/tfjs": "^0.11.7",
+        "@tensorflow/tfjs-node": "^0.1.7"
+    },
+    "devDependencies": {
+        "babel-cli": "^6.26.0",
+        "babel-preset-env": "^1.7.0",
+        "babel-preset-stage-2": "^6.24.1",
+        "nodemon": "^1.17.5"
+    }
+}
