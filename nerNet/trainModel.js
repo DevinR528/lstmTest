@@ -133,9 +133,9 @@ async function train(xTrain, yTrain, maxLen, vocab, batch, epochs, lrnRate, data
 const file = path.resolve(__dirname, '../trumpys_tweets.txt');
 const dataFile = path.resolve(__dirname, './model-trump-1');
 const maxLen = 40; //characters
-const epochs = 60;
-const lrnRate = 0.01;
-const batch = 60
+const epochs = 10;
+const lrnRate = 0.1;
+const batch = 120
 readData(file).then(text => {
     const [charsIndex, indexChars, vocab] = genDict(text);
     const [sentences, nextChars] = textToSequence(text, maxLen);
