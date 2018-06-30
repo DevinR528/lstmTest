@@ -3,7 +3,7 @@ const path = require('path');
 const util = require('util');
 
 const tf = require('@tensorflow/tfjs');
-require('@tensorflow/tfjs-node-gpu');
+require('@tensorflow/tfjs-node');
 
 /**
  *
