@@ -4,7 +4,7 @@
     "description": "tweet like trump",
     "main": "index.js",
     "scripts": {
-        "start": "node nerNet/trainModel.js",
+        "start": "node nerNet/trainClass.js",
         "load": "node nerNet/loadModel.js",
         "test": "echo \"Error: no test specified\" && exit 1"
     },

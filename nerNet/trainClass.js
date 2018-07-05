@@ -12,13 +12,28 @@ require('@tensorflow/tfjs-node');
  */
 class TextLSTMNet {
     /**
-     *Creates an instance of TextLSTMNet.
+     *Creates an instance of TextLSTMNet must call init() also
      * @param {String} file location of file to read in
      * @param {String} dataStore location to save model data
      * @param {Number} maxLen length of "sentence" number of characters
      * @param {Number} epochs number of epochs model goes through more is longer more than 10 takes a while with 128 batch
      * @param {Number} lrnRate learning rate of model ex .01
      * @param {Number} batchSize bigger is faster ex 128 splits 150,000 to 1000 batches
+     * @memberof TextLSTMNet
+     */
+    constructor(file, dataStore, maxLen, epochs, lrnRate, batchSize) {
+        this.file = path.resolve(__dirname, file);
+        this.dataStore = 'file://' + path.resolve(__dirname, dataStore);
+        this.maxLen = maxLen;
+        this.epochs = epochs;
+        this.lrnRate = lrnRate;
+        this.batchSize = batchSize;
+
+    }
+
+    /**
+     *
+     * @method init must call to read in data and create tensors
      * @param {String} text reading file async
      * @param {Object} charsIndex of shape {character: index}
      * @param {Object} indexChar of shape {index: char}
@@ -29,29 +44,23 @@ class TextLSTMNet {
      * @param {Tensor} y tensor of shape [[sentencesIndex],[nextCharsOneHot]]
      * @memberof TextLSTMNet
      */
-    async constructor(file, dataStore, maxLen, epochs, lrnRate, batchSize) {
-        this.file = file;
-        this.dataStore = 'file://' + dataStore;
-        this.maxLen = maxLen;
-        this.epochs = epochs;
-        this.lrnRate = lrnRate;
-        this.batchSize = batchSize;
-
+    async init(){
         this.text = await this.readData();
+        console.log(this.text.length);
 
-        [charsIndex, indexChars, vocab] = this.genDict();
+        const [charsIndex, indexChars, vocab] = this.genDict();
         this.charsIndex = charsIndex;
         this.indexChars = indexChars;
         this.vocab = vocab;
+        console.log(this.vocab);
 
-        [sentences, nextChars] = this.textToSequence();
+        const [sentences, nextChars] = this.textToSequence();
         this.sentences = sentences;
         this.nextChars = nextChars;
 
-        [x, y] = this.genTensors();
+        const [x, y] = this.genTensors();
         this.x = x;
         this.y = y;
-
     }
 
     /**
@@ -138,7 +147,7 @@ class TextLSTMNet {
                 char = sentence[j]
                 xBuffer.set(1, i, j, this.charsIndex[char]);
             }
-            yBuffer.set(1, i, dict[this.nextChars[i]]);
+            yBuffer.set(1, i, this.charsIndex[this.nextChars[i]]);
         }
         const x = xBuffer.toTensor();
         const y = yBuffer.toTensor();
@@ -148,11 +157,11 @@ class TextLSTMNet {
 
     /**
      *
-     * @method train
+     * @method _train
      * @returns {Promise} Sequential tensorflow model
      * @memberof TrainModel
      */
-    async train() {
+    async _train() {
         const model = tf.sequential();
         model.add(tf.layers.lstm({
             units: 128,
@@ -196,12 +205,12 @@ class TextLSTMNet {
         return model
     }
 
-    async buildModel() {
-        const model;
+    async trainOrLoadModel() {
+        let model;
         try {
             model = await tf.loadModel(this.dataStore)
         } catch (err) {
-            model = await this.train();
+            model = await this._train();
         }
         return model;
     }
@@ -216,8 +225,7 @@ class TextLSTMNet {
         return tf.argMax(probas);
     }
 
-    async generateText() {
-        const model = await tf.loadModel(this.dataStore);
+    async generateText(lenTextGen, model) {
 
         const sentArr = this.text.split(/\\EOT/g);
         const index = Math.floor(Math.random() * sentArr.length);
@@ -226,7 +234,7 @@ class TextLSTMNet {
         const splitSent = sentence.split(/(?!$)/u);
 
         let pred;
-        for (let t = 0; t < 110; t++) {
+        for (let t = 0; t < lenTextGen; t++) {
             const xPBuff = tf.buffer([1, this.maxLen, this.vocab]);
             for (let i = 0; i < this.maxLen; i++) {
                 char = splitSent[i];
@@ -237,12 +245,19 @@ class TextLSTMNet {
     }
 }
 
-const file = path.resolve(__dirname, '../trumpys_tweets.txt');
-const dataStore = path.resolve(__dirname, './model-trump-1');
-const maxLen = 40; //characters
-const epochs = 2;
-const lrnRate = 0.01;
-const batch = 128
 
-const tm = new TextLSTMNet(file, dataStore, maxLen, epochs, lrnRate, batch);
-tm.go();
+(async function run() {
+
+    const file = '../small.txt';
+    const dataStore = './test';
+    const maxLen = 40; //characters
+    const epochs = 40;
+    const lrnRate = 0.1;
+    const batch = 128;
+
+    const tm = new TextLSTMNet(file, dataStore, maxLen, epochs, lrnRate, batch);
+    await tm.init();
+    const model = await tm.trainOrLoadModel();
+    
+
+})();
