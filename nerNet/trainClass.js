@@ -8,11 +8,11 @@ require('@tensorflow/tfjs-node');
 /**
  *
  *
- * @class TextLSTMNet
+ * @class TextLSTM
  */
-class TextLSTMNet {
+class TextLSTM {
     /**
-     *Creates an instance of TextLSTMNet must call init() also
+     *Creates an instance of TextLSTM must call init() also
      * @param {String} file location of file to read in
      * @param {String} dataStore location to save model data
      * @param {Number} maxLen length of "sentence" number of characters
@@ -34,25 +34,23 @@ class TextLSTMNet {
     /**
      *
      * @method init must call to read in data and create tensors
-     * @param {String} text reading file async
-     * @param {Object} charsIndex of shape {character: index}
-     * @param {Object} indexChar of shape {index: char}
-     * @param {Number} vocab unique character in text
-     * @param {Array} sentences sequences of text maxLen long
-     * @param {Array} nextChar last char in sequence
-     * @param {Tensor} x tensor of shape [[sentencesIndex],[charIndex],[oneHot]]
-     * @param {Tensor} y tensor of shape [[sentencesIndex],[nextCharsOneHot]]
+     * @property {String} this.text reading file async
+     * @property {Object} this.charsIndex of shape {character: index}
+     * @property {Object} this.indexChar of shape {index: char}
+     * @property {Number} this.vocab unique character in text
+     * @property {Array} this.sentences sequences of text maxLen long
+     * @property {Array} this.nextChar last char in sequence
+     * @property {Tensor} this.x tensor of shape [[sentencesIndex],[charIndex],[oneHot]]
+     * @property {Tensor} this.y tensor of shape [[sentencesIndex],[nextCharsOneHot]]
      * @memberof TextLSTMNet
      */
     async init(){
         this.text = await this.readData();
-        console.log(this.text.length);
 
         const [charsIndex, indexChars, vocab] = this.genDict();
         this.charsIndex = charsIndex;
         this.indexChars = indexChars;
         this.vocab = vocab;
-        console.log(this.vocab);
 
         const [sentences, nextChars] = this.textToSequence();
         this.sentences = sentences;
@@ -122,7 +120,6 @@ class TextLSTMNet {
             tempNext = strArr[i + this.maxLen];
             nextChars.push(tempNext);
         }
-        console.log(`sentences: ${sentences.length} label: ${nextChars.length}`);
         return [sentences, nextChars];
     }
 
@@ -137,7 +134,6 @@ class TextLSTMNet {
      * @memberof TrainModel
      */
     genTensors() {
-
         const xBuffer = tf.buffer([this.sentences.length, this.maxLen, this.vocab]);
         const yBuffer = tf.buffer([this.sentences.length, this.vocab]);
         let sentence, char;
@@ -179,7 +175,6 @@ class TextLSTMNet {
             metrics: ['acc']
         });
 
-        console.log("HERE WE GO");
         await model.fit(this.x, this.y, {
             batchSize: this.batchSize,
             epochs: this.epochs,
@@ -198,66 +193,143 @@ class TextLSTMNet {
 
         await model.save(this.dataStore);
 
-        // Memory clean up: Dispose the training data.
-        xTrain.dispose();
-        yTrain.dispose();
-
         return model
     }
 
     async trainOrLoadModel() {
-        let model;
-        try {
-            model = await tf.loadModel(this.dataStore)
+        try {           
+            const model = await tf.loadModel(this.dataStore + '/model.json');
+            console.log('loading');
+            return model;
         } catch (err) {
-            model = await this._train();
+            console.log('training');
+            const model = await this._train();
+            return model;
         }
-        return model;
+        
     }
 
-    _sample(preds, temp = 1) {
-        const x = tf.log(preds);
-        x.div(temp);
-        const expPreds = tf.exp(x);
-        const y = tf.sum(expPreds);
-        const divPreds = expPreds / y;
-        const probas = tf.initializers.randomNormal()
-        return tf.argMax(probas);
+    _sample(predictions=tf.tensor2d, temperature=1) {
+        const temp = tf.scalar(temperature);
+        
+        const prob = tf.max(predictions);
+        const index = prob.dataSync();
+        
+        const arr = predictions.flatten();
+        const probArr = Array.from(arr.dataSync());
+        //tf.argMax(arr).print();
+        let numIndex;
+        probArr.find((val, i) => {
+            if(val === index[0]){
+                numIndex = i;
+            }
+        })
+
+        //console.log(numIndex);
+        return numIndex;
+        
+        // let x = tf.log(predictions);
+        // x = x.div(temp);
+        // const expPreds = tf.exp(x);
+        // const y = tf.sum(expPreds);
+        // x = expPreds.div(y)
+        // x.print(true);
+        // const probs = tf.multinomial(x, );
+        // tf.argMax(probs).print();
     }
 
-    async generateText(lenTextGen, model) {
-
+    /**
+     *
+     *
+     * @param {*} lenTextGen
+     * @param {*} model
+     * @memberof TextLSTMNet
+     */
+    // TODO wrap predict in tidy()
+    generateText(lenTextGen, model) {
         const sentArr = this.text.split(/\\EOT/g);
         const index = Math.floor(Math.random() * sentArr.length);
         const sentence = sentArr[index];
-        console.log(sentence);
         const splitSent = sentence.split(/(?!$)/u);
 
-        let pred;
+        console.log(splitSent[this.maxLen]);
+        console.log(sentence);
+
+        let charArr = [];
+        let predictArr = [];
+        charArr = splitSent.slice(0, this.maxLen);
+        predictArr = splitSent.slice(0, this.maxLen);
+    
+        let pred, char;
         for (let t = 0; t < lenTextGen; t++) {
-            const xPBuff = tf.buffer([1, this.maxLen, this.vocab]);
-            for (let i = 0; i < this.maxLen; i++) {
-                char = splitSent[i];
-                xPBuff.set(1, 0, i, this.charsIndex[char])
-            }
-            pred = model.predict(xPBuff);
+            tf.tidy(() => {
+                const xPBuff = tf.buffer([1, charArr.length, this.vocab]);
+                for (let i = 0; i < charArr.length; i++) {
+                    char = charArr[i];
+                    xPBuff.set(1, 0, i, this.charsIndex[char])
+                }
+                const x = xPBuff.toTensor();
+                pred = model.predict(x);
+                const nextIndex = this._sample(pred);
+
+                charArr.shift();
+                charArr.push(this.indexChars[nextIndex]);
+                predictArr.push(this.indexChars[nextIndex]);
+                
+            })
         }
+        const pridString = predictArr.join('');
+        console.log(pridString);
+        
+    }
+
+    async reTrainModel(locationToSave=this.dataStore){
+        const model = await tf.loadModel(this.dataStore + '/model.json')
+
+        const opt = tf.train.rmsprop(this.lrnRate);
+        model.compile({
+            loss: 'categoricalCrossentropy',
+            optimizer: opt,
+            metrics: ['acc']
+        });
+
+        await model.fit(this.x, this.y, {
+            batchSize: this.batchSize,
+            epochs: this.epochs,
+            callbacks: {
+                onEpochEnd: (epoch, logs) => {
+                    // each epoch log acc and loss
+                    const msg = (`==========================================================================
+                    epoch: ${epoch + 1} | loss: ${logs.loss} | acc: ${logs.acc}
+                    ==========================================================================`);
+
+                    console.log(msg);
+                },
+                onBatchEnd: (batch, logs) => {
+                    // batch log acc and loss
+                        console.log(`Batch: ${batch + 1} | loss: ${logs.loss} | acc: ${logs.acc}`);
+                }
+            }
+        });
+        await model.save('file://' + locationToSave);
     }
 }
 
 
 (async function run() {
 
-    const file = '../small.txt';
-    const dataStore = './test';
+    const file = '../trumpys_tweets.txt';
+    const dataStore = './model-trump-2';
     const maxLen = 40; //characters
-    const epochs = 40;
-    const lrnRate = 0.1;
+    const epochs = 2;
+    const lrnRate = 0.01;
     const batch = 128;
 
-    const tm = new TextLSTMNet(file, dataStore, maxLen, epochs, lrnRate, batch);
+    const tm = new TextLSTM(file, dataStore, maxLen, epochs, lrnRate, batch);
     await tm.init();
-    const model = await tm.trainOrLoadModel();
-    
-
+    // const model = await tm.trainOrLoadModel();
+    // tm.generateText(110, model);
+    for (let i = 0; i < 2; i++) {
+        await tm.reTrainModel(path.resolve(__dirname, 'model-trump-2'));
+    }
 })();
